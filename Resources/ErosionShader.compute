@@ -1,0 +1,113 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Rain
+#pragma kernel Erosion
+#pragma kernel Evaporation
+
+struct TerrainPoint
+{
+    float height;
+    float water;
+};
+
+StructuredBuffer<TerrainPoint> inData;
+RWStructuredBuffer<TerrainPoint> outData;
+float rain;
+float solubility;
+float evaporation;
+int resolution;
+
+[numthreads(9,9,1)]
+void Rain (uint3 id : SV_DispatchThreadID)
+{
+    const float eroded = rain * solubility;
+
+    TerrainPoint curPoint = inData[id.x * resolution + id.y];
+    
+    curPoint.water += rain;
+
+    if (curPoint.height - eroded <= 0.0f)
+    {
+        curPoint.water += curPoint.height / solubility - rain;
+        curPoint.height = 0.0f;
+    }
+    else
+        curPoint.height -= eroded;
+
+    outData[id.x * resolution + id.y] = curPoint;
+}
+
+[numthreads(27,27,1)]
+void Erosion (uint3 id : SV_DispatchThreadID)
+{
+    const int3 signedID = id;
+    
+    TerrainPoint curPoint = inData[signedID.x * resolution + signedID.y];
+    const float totalHeight = curPoint.height + curPoint.water;
+    
+    float accumulatedDistance = 0.0f;
+    float accumulatedNeighborHeight = 0.0f;
+
+    int neighborIndex[8] = {0,0,0,0,0,0,0,0};
+    float neighborDistance[8] = {0,0,0,0,0,0,0,0};
+    int lowerNeighborCount = 0;
+    
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            if (signedID.x+i >= 0 && signedID.x+i < resolution && signedID.y+j >= 0 && signedID.y+j < resolution)
+            {
+                const int currentNeighborIndex = (signedID.x+i) * resolution + (signedID.y+j);
+                const TerrainPoint neighbor = inData[currentNeighborIndex];
+                const float neighborTotalHeight = neighbor.height + neighbor.water;
+
+                const float distance = totalHeight - neighborTotalHeight;
+                                
+                if (distance > 0.0f)
+                {
+                    accumulatedDistance += distance;
+                    accumulatedNeighborHeight += neighborTotalHeight;
+
+                    neighborIndex[lowerNeighborCount] = currentNeighborIndex;
+                    neighborDistance[lowerNeighborCount] = distance;
+
+                    lowerNeighborCount++;
+                }
+            }
+        }
+    }
+                    
+    if (lowerNeighborCount > 0)
+    {
+        const float averageNeighborHeight = accumulatedNeighborHeight / lowerNeighborCount;
+                        
+        for(int i = 0; i < lowerNeighborCount; i++)
+        {
+            const float waterAmount = min(curPoint.water, totalHeight - averageNeighborHeight) * (neighborDistance[i]/accumulatedDistance);
+                            
+            curPoint.water -= waterAmount;
+
+            //Apply changes to outBuffer
+            outData[signedID.x * resolution + signedID.y].water -= waterAmount;
+            outData[neighborIndex[i]].water += waterAmount;
+        }
+    }
+}
+
+[numthreads(9,9,1)]
+void Evaporation (uint3 id : SV_DispatchThreadID)
+{
+    TerrainPoint curPoint = inData[id.x * resolution + id.y];
+
+    const float previousSedimentAmount = curPoint.water * solubility;
+    
+    curPoint.water *= 1 - evaporation;
+
+    const float currentSedimentAmount = curPoint.water * solubility;
+
+    const float depositedSediment = previousSedimentAmount - currentSedimentAmount;
+    
+    curPoint.height += depositedSediment;
+
+    outData[id.x * resolution + id.y] = curPoint;
+}

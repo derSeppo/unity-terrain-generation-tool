@@ -1,0 +1,12 @@
+{
+  "name": "com.pfeiffer_sebastian.terrain",
+  "version": "1.0.0",
+  "displayName": "Procedural Terrain Generator",
+  "description": "This is a customizable procedural terrain generation algorithm.\n\nUse by selecting \"Tools/Terrain Generator\".",
+  "unity": "2021.1",
+  "author": {
+    "name": "Sebastian Pfeiffer",
+    "email": "pfeiffer-sebastian@gmx.net"
+  },
+  "type": "tool"
+}
