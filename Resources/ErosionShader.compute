@@ -16,27 +16,28 @@ float solubility;
 float evaporation;
 int resolution;
 
-[numthreads(9,9,1)]
+[numthreads(16,16,1)]
 void Rain (uint3 id : SV_DispatchThreadID)
 {
     const float eroded = rain * solubility;
 
     TerrainPoint curPoint = inData[id.x * resolution + id.y];
-    
-    curPoint.water += rain;
 
-    if (curPoint.height - eroded <= 0.0f)
+    if (curPoint.height - eroded < 0.0f)
     {
         curPoint.water += curPoint.height / solubility - rain;
         curPoint.height = 0.0f;
     }
     else
+    {
+        curPoint.water += rain;
         curPoint.height -= eroded;
-
+    }
+        
     outData[id.x * resolution + id.y] = curPoint;
 }
 
-[numthreads(27,27,1)]
+[numthreads(16,16,1)]
 void Erosion (uint3 id : SV_DispatchThreadID)
 {
     const int3 signedID = id;
@@ -80,10 +81,11 @@ void Erosion (uint3 id : SV_DispatchThreadID)
     if (lowerNeighborCount > 0)
     {
         const float averageNeighborHeight = accumulatedNeighborHeight / lowerNeighborCount;
+        const float distributableWater = min(curPoint.water, totalHeight - averageNeighborHeight);
                         
         for(int i = 0; i < lowerNeighborCount; i++)
         {
-            const float waterAmount = min(curPoint.water, totalHeight - averageNeighborHeight) * (neighborDistance[i]/accumulatedDistance);
+            const float waterAmount = distributableWater * (neighborDistance[i]/accumulatedDistance);
                             
             curPoint.water -= waterAmount;
 
@@ -94,7 +96,7 @@ void Erosion (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(9,9,1)]
+[numthreads(16,16,1)]
 void Evaporation (uint3 id : SV_DispatchThreadID)
 {
     TerrainPoint curPoint = inData[id.x * resolution + id.y];
